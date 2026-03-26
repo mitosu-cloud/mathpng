@@ -1,9 +1,11 @@
 mod font;
+mod layout;
 mod math_expr;
 mod parse;
-mod render;
+mod png_render;
+mod svg_render;
 
-use render::Renderer;
+use layout::Renderer;
 
 /// Render options
 pub struct RenderOptions {
@@ -71,17 +73,11 @@ pub fn render_to_pixmap(
     let opts = options.unwrap_or_default();
     let font_size_px = opts.font_size_pt * opts.scale;
 
-    // 1. Parse LaTeX to MathExpr tree
     let expr = parse::parse_latex(latex)?;
-
-    // 2. Load font and create renderer
     let math_font = font::MathFont::load()?;
     let renderer = Renderer::new(&math_font, font_size_px);
-
-    // 3. Layout
     let layout = renderer.layout(&expr, opts.display_mode);
 
-    // 4. Render to pixmap
     let img_width = (layout.width + 2.0 * opts.padding as f32).ceil() as u32;
     let img_height = (layout.height() + 2.0 * opts.padding as f32).ceil() as u32;
     let img_width = img_width.max(1);
@@ -90,7 +86,6 @@ pub fn render_to_pixmap(
     let mut pixmap = tiny_skia::Pixmap::new(img_width, img_height)
         .ok_or_else(|| MathRenderError::Render("Failed to create pixmap".into()))?;
 
-    // Fill background
     let bg = tiny_skia::Color::from_rgba8(
         opts.bg_color[0],
         opts.bg_color[1],
@@ -99,11 +94,11 @@ pub fn render_to_pixmap(
     );
     pixmap.fill(bg);
 
-    // Render
     let origin_x = opts.padding as f32;
     let origin_y = opts.padding as f32 + layout.ascent;
 
-    renderer.render_node(
+    png_render::render_node(
+        &math_font,
         &mut pixmap,
         &layout,
         origin_x,
@@ -112,4 +107,25 @@ pub fn render_to_pixmap(
     );
 
     Ok(pixmap)
+}
+
+/// Render a LaTeX math string to an SVG string.
+///
+/// Input should be the LaTeX body WITHOUT surrounding `$` or `$$` delimiters.
+///
+/// # Example
+/// ```no_run
+/// let svg = mathpng::render_to_svg(r"\frac{1}{2} + \sqrt{x^2 + y^2}", None).unwrap();
+/// std::fs::write("equation.svg", &svg).unwrap();
+/// ```
+pub fn render_to_svg(latex: &str, options: Option<RenderOptions>) -> Result<String, MathRenderError> {
+    let opts = options.unwrap_or_default();
+    let font_size_px = opts.font_size_pt * opts.scale;
+
+    let expr = parse::parse_latex(latex)?;
+    let math_font = font::MathFont::load()?;
+    let renderer = Renderer::new(&math_font, font_size_px);
+    let layout = renderer.layout(&expr, opts.display_mode);
+
+    Ok(svg_render::render_to_svg_string(&math_font, &layout, &opts))
 }
