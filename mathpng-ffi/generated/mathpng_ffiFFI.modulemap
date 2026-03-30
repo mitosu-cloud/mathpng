@@ -1,0 +1,4 @@
+module mathpng_ffiFFI {
+    header "mathpng_ffiFFI.h"
+    export *
+}
